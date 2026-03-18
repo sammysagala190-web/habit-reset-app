@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Home Workout Coach V2",
+    "slug": "home-workout-coach-v2",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    }
+  }
+}
