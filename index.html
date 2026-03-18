@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Habit Reset" />
+  <title>Habit Reset</title>
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --card2: #1f2937;
+      --text: #f9fafb;
+      --muted: #cbd5e1;
+      --accent: #22c55e;
+      --accent2: #3b82f6;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 10px 30px rgba(0,0,0,0.25);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; background: linear-gradient(180deg, #0b1220, #0f172a 28%, #111827 100%); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; }
+    body { min-height: 100vh; }
+
+    .app {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(15,23,42,0.82);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      margin: calc(-1 * max(16px, env(safe-area-inset-top))) -16px 16px;
+      padding: max(16px, env(safe-area-inset-top)) 16px 14px;
+    }
+
+    h1 { margin: 0; font-size: 1.7rem; }
+    .sub { margin-top: 6px; color: var(--muted); font-size: 0.95rem; line-height: 1.4; }
+
+    .grid { display: grid; gap: 14px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .card {
+      background: rgba(17,24,39,0.95);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .stat-label { color: var(--muted); font-size: 0.9rem; }
+    .stat-value { font-size: 1.8rem; font-weight: 700; margin-top: 8px; }
+
+    .section-title {
+      margin: 2px 0 12px;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .segmented button, .btn {
+      border: none;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: white;
+      background: #273449;
+    }
+
+    .segmented button.active[data-type="success"] { background: var(--accent); }
+    .segmented button.active[data-type="urge"] { background: var(--warn); color: #111827; }
+    .segmented button.active[data-type="relapse"] { background: var(--danger); }
+
+    label { display:block; font-size: 0.92rem; color: var(--muted); margin: 12px 0 8px; }
+    input, textarea, select {
+      width: 100%;
+      background: #0b1220;
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 13px 14px;
+      font-size: 16px;
+    }
+    textarea { min-height: 92px; resize: vertical; }
+    .row2 { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .actions { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .primary { background: var(--accent2); }
+    .secondary { background: #334155; }
+    .danger { background: #7f1d1d; }
+
+    .pill {
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background:#0b1220;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:999px;
+      padding:8px 12px;
+      color:var(--muted);
+      font-size:0.9rem;
+      margin-top:8px;
+    }
+
+    .list { display:grid; gap:10px; }
+    .entry {
+      background:#0b1220;
+      border:1px solid rgba(255,255,255,.06);
+      border-radius:16px;
+      padding:12px;
+    }
+    .entry-top { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+    .badge {
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:0.8rem;
+      font-weight:700;
+    }
+    .b-success { background: rgba(34,197,94,.16); color: #86efac; }
+    .b-urge { background: rgba(245,158,11,.18); color: #fcd34d; }
+    .b-relapse { background: rgba(239,68,68,.16); color: #fca5a5; }
+    .entry small { color: var(--muted); }
+    .entry p { margin: 8px 0 0; line-height: 1.45; color: #e5e7eb; }
+
+    .footer-actions { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; }
+    .note { color: var(--muted); font-size: 0.88rem; line-height: 1.4; }
+    .hidden { display:none; }
+
+    @media (min-width: 760px) {
+      .layout { display:grid; grid-template-columns: 1.15fr .85fr; gap:14px; align-items:start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <h1>Habit Reset</h1>
+      <div class="sub">Tracker pribadi untuk mencatat urge, relapse, dan hari berhasil menahan, cocok dipakai di iPhone lewat Safari, Add to Home Screen.</div>
+    </div>
+
+    <div class="grid stats">
+      <div class="card">
+        <div class="stat-label">Current streak</div>
+        <div class="stat-value" id="currentStreak">0 hari</div>
+      </div>
+      <div class="card">
+        <div class="stat-label">Best streak</div>
+        <div class="stat-value" id="bestStreak">0 hari</div>
+      </div>
+    </div>
+
+    <div class="layout" style="margin-top:14px;">
+      <div class="grid">
+        <div class="card">
+          <div class="section-title">Check in hari ini</div>
+          <div class="segmented" id="typeButtons">
+            <button class="active" data-type="success">Berhasil</button>
+            <button data-type="urge">Urge</button>
+            <button data-type="relapse">Relapse</button>
+          </div>
+
+          <div class="row2">
+            <div>
+              <label for="intensity">Intensitas</label>
+              <select id="intensity">
+                <option value="1">1, rendah</option>
+                <option value="2">2</option>
+                <option value="3" selected>3, sedang</option>
+                <option value="4">4</option>
+                <option value="5">5, tinggi</option>
+              </select>
+            </div>
+            <div>
+              <label for="trigger">Pemicu utama</label>
+              <input id="trigger" placeholder="contoh, bosan, stres, sendirian" />
+            </div>
+          </div>
+
+          <label for="notes">Catatan</label>
+          <textarea id="notes" placeholder="Tulis apa yang terjadi, apa yang membantu, atau apa yang harus dihindari."></textarea>
+
+          <div class="actions">
+            <button class="btn primary" id="saveBtn">Simpan check in</button>
+            <button class="btn secondary" id="quickSuccessBtn">Quick add berhasil</button>
+          </div>
+          <div class="pill" id="todayStatus">Belum ada check in hari ini</div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">30 hari terakhir</div>
+          <div class="list" id="entries"></div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="section-title">Ringkasan</div>
+          <div class="pill" id="summary1">Urge 0 kali</div><br>
+          <div class="pill" id="summary2">Relapse 0 kali</div><br>
+          <div class="pill" id="summary3">Berhasil 0 hari</div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">Tools</div>
+          <div class="footer-actions">
+            <button class="btn secondary" id="exportBtn">Export</button>
+            <button class="btn secondary" id="importBtn">Import</button>
+            <button class="btn danger" id="resetBtn">Reset</button>
+          </div>
+          <input class="hidden" type="file" id="importFile" accept="application/json" />
+          <p class="note" style="margin-top:12px;">Data disimpan lokal di browser perangkatmu. Untuk iPhone, unggah file ini ke iCloud Drive atau GitHub Pages, lalu buka di Safari dan pilih Add to Home Screen.</p>
+        </div>
+
+        <div class="card">
+          <div class="section-title">Tips penggunaan</div>
+          <p class="note">Fokus pada pola, bukan rasa malu. Lihat pemicu paling sering, jam rentan, dan apakah streakmu membaik. Tujuan utama aplikasi ini adalah membantu kontrol diri, bukan menghukum diri.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const STORAGE_KEY = 'habit_reset_ios_v1';
+const $ = (id) => document.getElementById(id);
+
+let selectedType = 'success';
+let data = loadData();
+
+function loadData() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return { entries: [] };
+  try { return JSON.parse(raw); } catch { return { entries: [] }; }
+}
+
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
+function formatDate(iso) {
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' });
+}
+
+function selectType(type) {
+  selectedType = type;
+  document.querySelectorAll('#typeButtons button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.type === type);
+  });
+}
+
+document.querySelectorAll('#typeButtons button').forEach(btn => {
+  btn.addEventListener('click', () => selectType(btn.dataset.type));
+});
+
+function upsertTodayEntry(type, intensity, trigger, notes) {
+  const date = todayStr();
+  const existingIndex = data.entries.findIndex(e => e.date === date);
+  const entry = { date, type, intensity, trigger, notes, createdAt: new Date().toISOString() };
+  if (existingIndex >= 0) data.entries[existingIndex] = entry;
+  else data.entries.push(entry);
+  data.entries.sort((a,b) => b.date.localeCompare(a.date));
+  saveData();
+  render();
+}
+
+function quickSuccess() {
+  upsertTodayEntry('success', '3', '', 'Hari ini berhasil menahan.');
+}
+
+function computeStats(entries) {
+  const sortedAsc = [...entries].sort((a,b) => a.date.localeCompare(b.date));
+  const successDates = new Set(sortedAsc.filter(e => e.type === 'success').map(e => e.date));
+  const relapseDates = new Set(sortedAsc.filter(e => e.type === 'relapse').map(e => e.date));
+
+  let current = 0;
+  let cursor = new Date(todayStr() + 'T12:00:00');
+  while (true) {
+    const iso = cursor.toISOString().slice(0,10);
+    if (relapseDates.has(iso)) break;
+    if (successDates.has(iso)) current++;
+    else break;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  let best = 0, streak = 0;
+  let prevDate = null;
+  for (const d of [...successDates].sort()) {
+    if (!prevDate) {
+      streak = 1;
+    } else {
+      const prev = new Date(prevDate + 'T12:00:00');
+      const cur = new Date(d + 'T12:00:00');
+      const diff = Math.round((cur - prev) / 86400000);
+      if (diff === 1) streak += 1;
+      else streak = 1;
+    }
+    if (relapseDates.has(d)) streak = 0;
+    best = Math.max(best, streak);
+    prevDate = d;
+  }
+
+  return { current, best };
+}
+
+function render() {
+  const entries = [...data.entries].sort((a,b) => b.date.localeCompare(a.date));
+  const recent = entries.slice(0, 30);
+  const { current, best } = computeStats(entries);
+  $('currentStreak').textContent = `${current} hari`;
+  $('bestStreak').textContent = `${best} hari`;
+
+  const urgeCount = recent.filter(e => e.type === 'urge').length;
+  const relapseCount = recent.filter(e => e.type === 'relapse').length;
+  const successCount = recent.filter(e => e.type === 'success').length;
+  $('summary1').textContent = `Urge ${urgeCount} kali`;
+  $('summary2').textContent = `Relapse ${relapseCount} kali`;
+  $('summary3').textContent = `Berhasil ${successCount} hari`;
+
+  const today = entries.find(e => e.date === todayStr());
+  $('todayStatus').textContent = today
+    ? `Check in hari ini: ${labelType(today.type)}, intensitas ${today.intensity}/5`
+    : 'Belum ada check in hari ini';
+
+  $('entries').innerHTML = recent.length ? recent.map(e => `
+    <div class="entry">
+      <div class="entry-top">
+        <span class="badge ${badgeClass(e.type)}">${labelType(e.type)}</span>
+        <small>${formatDate(e.date)}</small>
+      </div>
+      <small>Intensitas ${e.intensity}/5${e.trigger ? `, pemicu: ${escapeHtml(e.trigger)}` : ''}</small>
+      ${e.notes ? `<p>${escapeHtml(e.notes)}</p>` : ''}
+    </div>
+  `).join('') : `<p class="note">Belum ada data. Mulai dengan check in pertama hari ini.</p>`;
+}
+
+function labelType(type) {
+  return type === 'success' ? 'Berhasil' : type === 'urge' ? 'Urge' : 'Relapse';
+}
+function badgeClass(type) {
+  return type === 'success' ? 'b-success' : type === 'urge' ? 'b-urge' : 'b-relapse';
+}
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+$('saveBtn').addEventListener('click', () => {
+  upsertTodayEntry(selectedType, $('intensity').value, $('trigger').value.trim(), $('notes').value.trim());
+  $('trigger').value = '';
+  $('notes').value = '';
+  $('intensity').value = '3';
+  selectType('success');
+});
+$('quickSuccessBtn').addEventListener('click', quickSuccess);
+
+$('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `habit-reset-backup-${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+$('importBtn').addEventListener('click', () => $('importFile').click());
+$('importFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (!parsed.entries || !Array.isArray(parsed.entries)) throw new Error('Format salah');
+    data = parsed;
+    saveData();
+    render();
+    alert('Data berhasil diimport.');
+  } catch {
+    alert('File JSON tidak valid.');
+  }
+  e.target.value = '';
+});
+
+$('resetBtn').addEventListener('click', () => {
+  const ok = confirm('Hapus semua data tracker?');
+  if (!ok) return;
+  data = { entries: [] };
+  saveData();
+  render();
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  });
+}
+
+render();
+</script>
+</body>
+</html>
