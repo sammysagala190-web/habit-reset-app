@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Habit Reset</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="card hero">
+      <div>
+        <h1>Habit Reset</h1>
+        <p>Phone friendly habit tracker with GitHub sync.</p>
+      </div>
+      <button id="saveAllBtn" class="primary">Save to GitHub</button>
+    </header>
+
+    <section class="card">
+      <h2>Overview</h2>
+      <div class="metrics">
+        <div class="metric"><span>Current streak</span><strong id="currentStreak">0 days</strong></div>
+        <div class="metric"><span>Longest clean streak</span><strong id="longestStreak">0 days</strong></div>
+        <div class="metric"><span>Total relapse reports</span><strong id="reportCount">0</strong></div>
+        <div class="metric"><span>Last relapse</span><strong id="lastRelapse">None logged</strong></div>
+      </div>
+      <p class="help">The streak increases automatically every day unless you log a relapse. No success check in is needed.</p>
+    </section>
+
+    <section class="card">
+      <h2>Profile</h2>
+      <label>Name</label>
+      <input id="userName" type="text" placeholder="Your name" />
+      <label>Tracking start date</label>
+      <input id="trackingStartDate" type="date" />
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2 id="formTitle">Add relapse report</h2>
+        <button id="cancelEditBtn" class="ghost hidden">Cancel edit</button>
+      </div>
+      <label>Date</label>
+      <input id="reportDate" type="date" />
+      <label>Trigger</label>
+      <input id="reportTrigger" type="text" placeholder="What triggered it?" />
+      <label>Notes</label>
+      <textarea id="reportNotes" rows="4" placeholder="Write what happened and what to improve next time."></textarea>
+      <button id="saveReportBtn" class="primary">Save report</button>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2 id="monthLabel">Calendar</h2>
+        <div class="legend-wrap">
+          <span class="legend-item"><i class="legend clean"></i>Clean</span>
+          <span class="legend-item"><i class="legend relapse"></i>Relapse</span>
+        </div>
+      </div>
+      <div id="calendar" class="calendar"></div>
+    </section>
+
+    <section class="card">
+      <h2>Relapse history</h2>
+      <div id="reportList" class="report-list"></div>
+    </section>
+
+    <section class="card">
+      <h2>GitHub Sync Settings</h2>
+      <label>GitHub username</label>
+      <input id="githubOwner" type="text" placeholder="sammysagala190-web" />
+      <label>Repository</label>
+      <input id="githubRepo" type="text" placeholder="habit-reset-app" />
+      <label>Branch</label>
+      <input id="githubBranch" type="text" placeholder="main" />
+      <label>Data file path</label>
+      <input id="githubPath" type="text" placeholder="data/habit-data.json" />
+      <label>Fine grained personal access token</label>
+      <input id="githubToken" type="password" placeholder="Paste token here" />
+      <div class="row">
+        <button id="loadGithubBtn" class="secondary">Load from GitHub</button>
+        <button id="saveSettingsBtn" class="ghost">Save settings on this phone</button>
+      </div>
+      <p class="help">Do not hardcode your token in the repo. Paste it here on your iPhone. It stays only in this browser storage unless you clear it.</p>
+      <div id="status" class="status">Ready.</div>
+    </section>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
