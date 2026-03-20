@@ -12,46 +12,56 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 
-type Difficulty = 'Beginner' | 'Intermediate' | 'Advanced';
-type Feedback = 'Too Easy' | 'Just Right' | 'Too Hard';
-type Focus = 'Full Body' | 'Abs' | 'Chest' | 'Legs' | 'Arms' | 'Butt';
-
-type WorkoutSession = {
+type RelapseReport = {
+  id: string;
   date: string;
-  completed: boolean;
-  feedback?: Feedback;
-  routineTitle: string;
-  durationMin: number;
-  focus: Focus;
+  trigger: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
-type WorkoutPlan = {
-  title: string;
-  focus: Focus;
-  durationMin: number;
-  intensity: string;
-  exercises: string[];
-  restSeconds: number;
-  source: 'adaptive-engine' | 'online-service';
+type AppState = {
+  trackingStartDate: string;
+  reports: RelapseReport[];
+  userName: string;
 };
 
-const STORAGE_KEY = 'home-workout-coach-v1';
-const ONLINE_SUGGESTION_URL = '';
-
-const focusOptions: Focus[] = ['Full Body', 'Abs', 'Chest', 'Legs', 'Arms', 'Butt'];
-const difficulties: Difficulty[] = ['Beginner', 'Intermediate', 'Advanced'];
-const feedbackOptions: Feedback[] = ['Too Easy', 'Just Right', 'Too Hard'];
-
+const STORAGE_KEY = 'habit-reset-app-v1';
 const pad = (n: number) => String(n).padStart(2, '0');
-const today = new Date();
-const todayKey = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 
-function clampDifficulty(level: number): number {
-  return Math.max(0, Math.min(2, level));
+function todayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-function getDifficultyLabel(level: number): Difficulty {
-  return difficulties[clampDifficulty(level)];
+function isValidDateKey(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function dateFromKey(key: string) {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatPrettyDate(key: string) {
+  const date = dateFromKey(key);
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function daysBetween(startKey: string, endKey: string) {
+  const start = startOfDay(dateFromKey(startKey));
+  const end = startOfDay(dateFromKey(endKey));
+  return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function getMonthMatrix(date = new Date()) {
@@ -78,90 +88,28 @@ function dateKeyFor(year: number, month: number, day: number) {
   return `${year}-${pad(month + 1)}-${pad(day)}`;
 }
 
-function getAdaptivePlan(level: number, focus: Focus, previousFeedback?: Feedback): WorkoutPlan {
-  let adjustedLevel = clampDifficulty(level);
-  if (previousFeedback === 'Too Easy') adjustedLevel = clampDifficulty(adjustedLevel + 1);
-  if (previousFeedback === 'Too Hard') adjustedLevel = clampDifficulty(adjustedLevel - 1);
-
-  const presets: Record<Difficulty, { rounds: number; work: number; rest: number; duration: number; intensity: string }> = {
-    Beginner: { rounds: 2, work: 30, rest: 40, duration: 16, intensity: 'Low to moderate' },
-    Intermediate: { rounds: 3, work: 40, rest: 30, duration: 24, intensity: 'Moderate' },
-    Advanced: { rounds: 4, work: 45, rest: 20, duration: 32, intensity: 'Moderate to high' },
-  };
-
-  const exerciseBank: Record<Focus, string[]> = {
-    'Full Body': ['Jumping Jacks', 'Bodyweight Squats', 'Push Ups', 'Mountain Climbers', 'Glute Bridges', 'Plank'],
-    Abs: ['Dead Bug', 'Bicycle Crunches', 'Leg Raises', 'Plank', 'Heel Taps', 'Russian Twists'],
-    Chest: ['Push Ups', 'Wide Push Ups', 'Incline Push Ups', 'Pike Push Ups', 'Wall Push Ups', 'Slow Negative Push Ups'],
-    Legs: ['Bodyweight Squats', 'Reverse Lunges', 'Wall Sit', 'Calf Raises', 'Split Squats', 'Pulse Squats'],
-    Arms: ['Push Ups', 'Triceps Dips on Chair', 'Plank Up Downs', 'Arm Circles', 'Diamond Push Ups', 'Shoulder Taps'],
-    Butt: ['Glute Bridges', 'Donkey Kicks', 'Fire Hydrants', 'Sumo Squats', 'Hip Thrusts', 'Curtsy Lunges'],
-  };
-
-  const difficulty = getDifficultyLabel(adjustedLevel);
-  const preset = presets[difficulty];
-  const exercises = exerciseBank[focus].slice(0, Math.min(6, preset.rounds + 3));
-
-  return {
-    title: `${difficulty} ${focus} Session`,
-    focus,
-    durationMin: preset.duration,
-    intensity: `${preset.intensity}, ${preset.rounds} rounds, ${preset.work}s work`,
-    exercises,
-    restSeconds: preset.rest,
-    source: 'adaptive-engine',
-  };
-}
-
-async function fetchOnlineSuggestion(payload: { difficulty: Difficulty; focus: Focus; previousFeedback?: Feedback }) {
-  if (!ONLINE_SUGGESTION_URL) return null;
-
-  try {
-    const response = await fetch(ONLINE_SUGGESTION_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (!data?.title || !Array.isArray(data?.exercises)) return null;
-
-    return {
-      title: String(data.title),
-      focus: payload.focus,
-      durationMin: Number(data.durationMin ?? 20),
-      intensity: String(data.intensity ?? payload.difficulty),
-      exercises: data.exercises.map((item: unknown) => String(item)),
-      restSeconds: Number(data.restSeconds ?? 30),
-      source: 'online-service' as const,
-    };
-  } catch {
-    return null;
-  }
-}
-
 export default function App() {
-  const [difficultyLevel, setDifficultyLevel] = useState<number>(0);
-  const [focus, setFocus] = useState<Focus>('Full Body');
-  const [sessions, setSessions] = useState<Record<string, WorkoutSession>>({});
-  const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
-  const [plan, setPlan] = useState<WorkoutPlan | null>(null);
+  const [trackingStartDate, setTrackingStartDate] = useState(todayKey());
+  const [reports, setReports] = useState<RelapseReport[]>([]);
+  const [userName, setUserName] = useState('Sam');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formDate, setFormDate] = useState(todayKey());
+  const [formTrigger, setFormTrigger] = useState('');
+  const [formNotes, setFormNotes] = useState('');
 
   useEffect(() => {
     const load = async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          const parsed = JSON.parse(raw);
-          setDifficultyLevel(parsed.difficultyLevel ?? 0);
-          setFocus(parsed.focus ?? 'Full Body');
-          setSessions(parsed.sessions ?? {});
-          setNote(parsed.note ?? '');
+          const parsed: Partial<AppState> = JSON.parse(raw);
+          setTrackingStartDate(parsed.trackingStartDate ?? todayKey());
+          setReports(Array.isArray(parsed.reports) ? parsed.reports : []);
+          setUserName(parsed.userName ?? 'Sam');
         }
       } catch {
-        Alert.alert('Load issue', 'Could not load saved workout data.');
+        Alert.alert('Load issue', 'Could not load your saved habit data.');
       } finally {
         setLoading(false);
       }
@@ -171,28 +119,110 @@ export default function App() {
 
   useEffect(() => {
     if (loading) return;
-    AsyncStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ difficultyLevel, focus, sessions, note })
-    ).catch(() => {
+    const state: AppState = { trackingStartDate, reports, userName };
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {
       Alert.alert('Save issue', 'Could not save your latest changes.');
     });
-  }, [difficultyLevel, focus, sessions, note, loading]);
+  }, [loading, trackingStartDate, reports, userName]);
 
-  const latestFeedback = sessions[todayKey]?.feedback;
+  const sortedReports = useMemo(
+    () => [...reports].sort((a, b) => b.date.localeCompare(a.date) || b.updatedAt.localeCompare(a.updatedAt)),
+    [reports]
+  );
 
-  useEffect(() => {
-    const buildPlan = async () => {
-      const fallback = getAdaptivePlan(difficultyLevel, focus, latestFeedback);
-      const online = await fetchOnlineSuggestion({
-        difficulty: getDifficultyLabel(difficultyLevel),
-        focus,
-        previousFeedback: latestFeedback,
-      });
-      setPlan(online ?? fallback);
+  const relapseDateSet = useMemo(() => new Set(reports.map((report) => report.date)), [reports]);
+
+  const lastRelapseDate = useMemo(() => {
+    if (sortedReports.length === 0) return null;
+    return sortedReports[0].date;
+  }, [sortedReports]);
+
+  const streak = useMemo(() => {
+    const today = todayKey();
+    if (lastRelapseDate) {
+      return Math.max(0, daysBetween(lastRelapseDate, today));
+    }
+    return Math.max(1, daysBetween(trackingStartDate, today) + 1);
+  }, [lastRelapseDate, trackingStartDate]);
+
+  const longestGap = useMemo(() => {
+    const today = todayKey();
+    const dates = [...new Set(reports.map((report) => report.date))].sort();
+    if (dates.length === 0) return Math.max(1, daysBetween(trackingStartDate, today) + 1);
+
+    let best = Math.max(0, daysBetween(trackingStartDate, dates[0]));
+    for (let i = 1; i < dates.length; i += 1) {
+      best = Math.max(best, Math.max(0, daysBetween(dates[i - 1], dates[i]) - 1));
+    }
+    best = Math.max(best, Math.max(0, daysBetween(dates[dates.length - 1], today)));
+    return best;
+  }, [reports, trackingStartDate]);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setFormDate(todayKey());
+    setFormTrigger('');
+    setFormNotes('');
+  };
+
+  const saveReport = () => {
+    if (!isValidDateKey(formDate)) {
+      Alert.alert('Invalid date', 'Use YYYY-MM-DD format.');
+      return;
+    }
+    if (daysBetween(formDate, todayKey()) < 0) {
+      Alert.alert('Invalid date', 'Relapse date cannot be in the future.');
+      return;
+    }
+    if (daysBetween(trackingStartDate, formDate) < 0) {
+      Alert.alert('Invalid date', 'Relapse date cannot be earlier than your tracking start date.');
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+
+    if (editingId) {
+      setReports((prev) =>
+        prev.map((report) =>
+          report.id === editingId
+            ? {
+                ...report,
+                date: formDate,
+                trigger: formTrigger.trim(),
+                notes: formNotes.trim(),
+                updatedAt: timestamp,
+              }
+            : report
+        )
+      );
+      resetForm();
+      return;
+    }
+
+    const newReport: RelapseReport = {
+      id: `${timestamp}-${Math.random().toString(36).slice(2, 9)}`,
+      date: formDate,
+      trigger: formTrigger.trim(),
+      notes: formNotes.trim(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
     };
-    buildPlan();
-  }, [difficultyLevel, focus, latestFeedback]);
+
+    setReports((prev) => [...prev, newReport]);
+    resetForm();
+  };
+
+  const startEdit = (report: RelapseReport) => {
+    setEditingId(report.id);
+    setFormDate(report.date);
+    setFormTrigger(report.trigger);
+    setFormNotes(report.notes);
+  };
+
+  const deleteReport = (id: string) => {
+    setReports((prev) => prev.filter((report) => report.id !== id));
+    if (editingId === id) resetForm();
+  };
 
   const monthData = useMemo(() => getMonthMatrix(new Date()), []);
   const monthLabel = new Date(monthData.year, monthData.month, 1).toLocaleString(undefined, {
@@ -200,57 +230,12 @@ export default function App() {
     year: 'numeric',
   });
 
-  const completedCount = Object.values(sessions).filter((s) => s.completed).length;
-
-  const markTodayDone = () => {
-    if (!plan) return;
-    setSessions((prev) => ({
-      ...prev,
-      [todayKey]: {
-        date: todayKey,
-        completed: true,
-        routineTitle: plan.title,
-        durationMin: plan.durationMin,
-        focus: plan.focus,
-        feedback: prev[todayKey]?.feedback,
-      },
-    }));
-  };
-
-  const setTodayFeedback = (feedback: Feedback) => {
-    if (!plan) return;
-    setSessions((prev) => ({
-      ...prev,
-      [todayKey]: {
-        date: todayKey,
-        completed: prev[todayKey]?.completed ?? false,
-        routineTitle: prev[todayKey]?.routineTitle ?? plan.title,
-        durationMin: prev[todayKey]?.durationMin ?? plan.durationMin,
-        focus: prev[todayKey]?.focus ?? plan.focus,
-        feedback,
-      },
-    }));
-  };
-
-  const streak = (() => {
-    let count = 0;
-    const cursor = new Date();
-    while (true) {
-      const key = `${cursor.getFullYear()}-${pad(cursor.getMonth() + 1)}-${pad(cursor.getDate())}`;
-      if (sessions[key]?.completed) {
-        count += 1;
-        cursor.setDate(cursor.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-    return count;
-  })();
+  const today = todayKey();
 
   if (loading) {
     return (
       <SafeAreaView style={styles.centered}>
-        <Text style={styles.loadingText}>Loading workout planner...</Text>
+        <Text style={styles.loadingText}>Loading habit tracker...</Text>
       </SafeAreaView>
     );
   }
@@ -259,77 +244,72 @@ export default function App() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Home Workout Coach</Text>
-        <Text style={styles.subtitle}>Track sessions, adjust difficulty, and get a daily bodyweight routine.</Text>
+        <Text style={styles.title}>Habit Reset</Text>
+        <Text style={styles.subtitle}>Automatic streaks, relapse logging, editable reports.</Text>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Progress</Text>
-          <Text style={styles.metric}>Completed sessions: {completedCount}</Text>
+          <Text style={styles.sectionTitle}>Overview</Text>
+          <Text style={styles.metric}>Name: {userName || 'User'}</Text>
+          <Text style={styles.metric}>Tracking since: {formatPrettyDate(trackingStartDate)}</Text>
           <Text style={styles.metric}>Current streak: {streak} day{streak === 1 ? '' : 's'}</Text>
-          <Text style={styles.metric}>Today: {sessions[todayKey]?.completed ? 'Done' : 'Not yet completed'}</Text>
+          <Text style={styles.metric}>Longest clean streak: {longestGap} day{longestGap === 1 ? '' : 's'}</Text>
+          <Text style={styles.metric}>Total relapse reports: {reports.length}</Text>
+          <Text style={styles.metric}>Last relapse: {lastRelapseDate ? formatPrettyDate(lastRelapseDate) : 'None logged'}</Text>
+          <Text style={styles.helperText}>The streak updates automatically every day unless you log a relapse. No success check in is needed.</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Difficulty</Text>
-          <View style={styles.rowWrap}>
-            {difficulties.map((label, index) => (
-              <Pressable
-                key={label}
-                style={[styles.chip, difficultyLevel === index && styles.chipActive]}
-                onPress={() => setDifficultyLevel(index)}
-              >
-                <Text style={[styles.chipText, difficultyLevel === index && styles.chipTextActive]}>{label}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Focus area</Text>
-          <View style={styles.rowWrap}>
-            {focusOptions.map((item) => (
-              <Pressable
-                key={item}
-                style={[styles.chip, focus === item && styles.chipActive]}
-                onPress={() => setFocus(item)}
-              >
-                <Text style={[styles.chipText, focus === item && styles.chipTextActive]}>{item}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <Text style={styles.sectionTitle}>Profile</Text>
+          <Text style={styles.inputLabel}>Name</Text>
+          <TextInput
+            style={styles.input}
+            value={userName}
+            onChangeText={setUserName}
+            placeholder="Your name"
+          />
+          <Text style={[styles.inputLabel, { marginTop: 14 }]}>Tracking start date</Text>
+          <TextInput
+            style={styles.input}
+            value={trackingStartDate}
+            onChangeText={setTrackingStartDate}
+            placeholder="YYYY-MM-DD"
+            autoCapitalize="none"
+          />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Today’s plan</Text>
-          {plan ? (
-            <>
-              <Text style={styles.planTitle}>{plan.title}</Text>
-              <Text style={styles.planMeta}>Duration: {plan.durationMin} min</Text>
-              <Text style={styles.planMeta}>Intensity: {plan.intensity}</Text>
-              <Text style={styles.planMeta}>Rest between moves: {plan.restSeconds} seconds</Text>
-              <Text style={styles.planMeta}>Plan source: {plan.source}</Text>
-              {plan.exercises.map((exercise) => (
-                <Text key={exercise} style={styles.exerciseItem}>• {exercise}</Text>
-              ))}
-            </>
-          ) : (
-            <Text>No workout suggestion available yet.</Text>
-          )}
-
-          <Pressable style={styles.primaryButton} onPress={markTodayDone}>
-            <Text style={styles.primaryButtonText}>Mark today complete</Text>
+          <Text style={styles.sectionTitle}>{editingId ? 'Edit relapse report' : 'Add relapse report'}</Text>
+          <Text style={styles.inputLabel}>Date</Text>
+          <TextInput
+            style={styles.input}
+            value={formDate}
+            onChangeText={setFormDate}
+            placeholder="YYYY-MM-DD"
+            autoCapitalize="none"
+          />
+          <Text style={[styles.inputLabel, { marginTop: 14 }]}>Trigger</Text>
+          <TextInput
+            style={styles.input}
+            value={formTrigger}
+            onChangeText={setFormTrigger}
+            placeholder="What triggered it?"
+          />
+          <Text style={[styles.inputLabel, { marginTop: 14 }]}>Notes</Text>
+          <TextInput
+            style={styles.textArea}
+            value={formNotes}
+            onChangeText={setFormNotes}
+            placeholder="Write what happened and what to improve next time."
+            multiline
+          />
+          <Pressable style={styles.primaryButton} onPress={saveReport}>
+            <Text style={styles.primaryButtonText}>{editingId ? 'Save changes' : 'Save report'}</Text>
           </Pressable>
-
-          <Text style={[styles.sectionTitle, { marginTop: 18 }]}>How did it feel?</Text>
-          <View style={styles.rowWrap}>
-            {feedbackOptions.map((item) => (
-              <Pressable
-                key={item}
-                style={[styles.chip, sessions[todayKey]?.feedback === item && styles.chipActive]}
-                onPress={() => setTodayFeedback(item)}
-              >
-                <Text style={[styles.chipText, sessions[todayKey]?.feedback === item && styles.chipTextActive]}>{item}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {editingId ? (
+            <Pressable style={styles.secondaryButton} onPress={resetForm}>
+              <Text style={styles.secondaryButtonText}>Cancel editing</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -344,28 +324,51 @@ export default function App() {
               {week.map((day, cellIndex) => {
                 if (!day) return <View key={cellIndex} style={styles.dayCell} />;
                 const key = dateKeyFor(monthData.year, monthData.month, day);
-                const done = sessions[key]?.completed;
-                const isToday = key === todayKey;
+                const isToday = key === today;
+                const started = daysBetween(trackingStartDate, key) >= 0;
+                const inPastOrToday = daysBetween(key, today) >= 0;
+                const relapse = relapseDateSet.has(key);
+                const cleanDay = started && inPastOrToday && !relapse;
                 return (
-                  <View key={cellIndex} style={[styles.dayCell, done && styles.dayCellDone, isToday && styles.dayCellToday]}>
-                    <Text style={[styles.dayText, done && styles.dayTextDone]}>{day}</Text>
+                  <View
+                    key={cellIndex}
+                    style={[
+                      styles.dayCell,
+                      cleanDay && styles.dayCellClean,
+                      relapse && styles.dayCellRelapse,
+                      isToday && styles.dayCellToday,
+                    ]}
+                  >
+                    <Text style={[styles.dayText, relapse && styles.dayTextRelapse]}>{day}</Text>
                   </View>
                 );
               })}
             </View>
           ))}
-          <Text style={styles.legend}>Filled cells mean workout completed. Outlined cell marks today.</Text>
+          <Text style={styles.legend}>Green means no relapse, red means relapse reported, outlined means today.</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Notes</Text>
-          <TextInput
-            style={styles.textArea}
-            placeholder="Write what worked today, what was hard, or what you want tomorrow."
-            multiline
-            value={note}
-            onChangeText={setNote}
-          />
+          <Text style={styles.sectionTitle}>Relapse history</Text>
+          {sortedReports.length === 0 ? (
+            <Text style={styles.metric}>No relapse reports yet.</Text>
+          ) : (
+            sortedReports.map((report) => (
+              <View key={report.id} style={styles.historyItem}>
+                <Text style={styles.historyTitle}>{formatPrettyDate(report.date)}</Text>
+                <Text style={styles.historyMeta}>Trigger: {report.trigger || 'Not specified'}</Text>
+                <Text style={styles.historyMeta}>Notes: {report.notes || 'No notes'}</Text>
+                <View style={styles.historyButtons}>
+                  <Pressable style={styles.smallButton} onPress={() => startEdit(report)}>
+                    <Text style={styles.smallButtonText}>Edit</Text>
+                  </Pressable>
+                  <Pressable style={styles.smallDangerButton} onPress={() => deleteReport(report.id)}>
+                    <Text style={styles.smallDangerButtonText}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -415,40 +418,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 6,
   },
-  rowWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  helperText: {
+    marginTop: 10,
+    color: '#6b7280',
+    fontSize: 13,
+    lineHeight: 18,
   },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: '#eef2ff',
-  },
-  chipActive: {
-    backgroundColor: '#1f3c88',
-  },
-  chipText: {
-    color: '#1f2937',
-    fontWeight: '600',
-  },
-  chipTextActive: {
-    color: '#ffffff',
-  },
-  planTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 10,
-  },
-  planMeta: {
+  inputLabel: {
     fontSize: 14,
+    fontWeight: '600',
     marginBottom: 6,
     color: '#374151',
   },
-  exerciseItem: {
-    fontSize: 15,
-    marginTop: 6,
+  input: {
+    borderColor: '#d1d5db',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#ffffff',
+  },
+  textArea: {
+    minHeight: 100,
+    borderColor: '#d1d5db',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    textAlignVertical: 'top',
+    backgroundColor: '#ffffff',
   },
   primaryButton: {
     marginTop: 14,
@@ -460,6 +456,18 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#ffffff',
     fontSize: 15,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    marginTop: 10,
+    backgroundColor: '#eef2ff',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: '#1f3c88',
+    fontSize: 14,
     fontWeight: '700',
   },
   weekHeader: {
@@ -489,32 +497,68 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#ffffff',
   },
-  dayCellDone: {
-    backgroundColor: '#c7f9cc',
-    borderColor: '#84cc16',
+  dayCellClean: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#22c55e',
+  },
+  dayCellRelapse: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
   },
   dayCellToday: {
-    borderColor: '#1f3c88',
     borderWidth: 2,
+    borderColor: '#1f3c88',
   },
   dayText: {
     fontSize: 14,
     fontWeight: '600',
   },
-  dayTextDone: {
-    color: '#14532d',
+  dayTextRelapse: {
+    color: '#991b1b',
   },
   legend: {
     marginTop: 10,
     color: '#6b7280',
     fontSize: 13,
   },
-  textArea: {
-    minHeight: 100,
-    borderColor: '#d1d5db',
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    textAlignVertical: 'top',
+  historyItem: {
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  historyMeta: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 4,
+  },
+  historyButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  smallButton: {
+    backgroundColor: '#eef2ff',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  smallButtonText: {
+    color: '#1f3c88',
+    fontWeight: '700',
+  },
+  smallDangerButton: {
+    backgroundColor: '#fee2e2',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  smallDangerButtonText: {
+    color: '#b91c1c',
+    fontWeight: '700',
   },
 });
